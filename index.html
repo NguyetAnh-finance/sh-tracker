@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#090d16" />
+  <title>Stationhead Stream Analytics — @bachutraimeo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            slate: {
+              850: '#151e32',
+              900: '#0f172a',
+              950: '#090d16',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #090d16;
+      color: #f8fafc;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.14) 0%, transparent 45%),
+        radial-gradient(circle at 85% 20%, rgba(16, 185, 129, 0.10) 0%, transparent 45%);
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.76);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+    .pulse-dot {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  </style>
+</head>
+<body class="antialiased selection:bg-indigo-500 selection:text-white pb-8">
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="relative shrink-0">
+          <img id="userAvatar" src="https://stationhead-production1-images.s3.amazonaws.com/images/Account/primary/200/48487011-a896-49d6-a7a6-c9a65ff483b4.jpeg" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-indigo-500/40 shadow-md" onerror="this.src='https://ui-avatars.com/api/?name=B&background=6366f1&color=fff'">
+          <span id="liveDot" class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-950 pulse-dot"></span>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm sm:text-lg font-bold tracking-tight text-white truncate">Stream Analytics</h1>
+            <span id="channelBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shrink-0">
+              Cổ Đông
+            </span>
+            <span id="cloudStatusBadge" class="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" id="cloudDot"></span>
+              <span id="cloudText">Firebase Cloud</span>
+            </span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-400 truncate">
+            <span id="userHandle" class="font-mono text-slate-300">@bachutraimeo</span>
+            <span> • </span>
+            <span id="lastUpdatedText">Đang đồng bộ...</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <!-- Sync Now Button -->
+        <button onclick="handleRealtimeClick()" id="btnSyncNow" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 active:scale-[0.97] text-white shadow-lg shadow-indigo-500/20 transition cursor-pointer">
+          <svg id="syncIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span>Real-time</span>
+        </button>
+
+        <!-- Setup / Manual JSON Modal Trigger -->
+        <button onclick="openModal('script')" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer" title="Cấu hình & Script">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <span class="hidden sm:inline">Script PC</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Status Banner -->
+  <div id="statusBanner" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+    <div id="statusBannerInner" class="rounded-xl p-3.5 border flex items-start justify-between gap-3 text-xs sm:text-sm">
+      <div class="flex items-start gap-2.5">
+        <span id="statusBannerIcon" class="mt-0.5 text-base">ℹ️</span>
+        <div id="statusBannerMsg" class="leading-relaxed"></div>
+      </div>
+      <button onclick="hideBanner()" class="text-slate-400 hover:text-white text-lg leading-none cursor-pointer">&times;</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5 sm:space-y-6">
+
+    <!-- KPI Cards Grid -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <!-- KPI 1: Total Streams -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">Tổng Stream</span>
+          <span class="p-1.5 sm:p-2 rounded-lg bg-indigo-500/15 text-indigo-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+          </span>
+        </div>
+        <div class="mt-2.5 flex flex-wrap items-baseline gap-2">
+          <span id="kpiTotalStreams" class="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight">1,135</span>
+          <span id="kpiSessionDelta" class="hidden text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">+0</span>
+        </div>
+        <p class="mt-1.5 text-[11px] sm:text-xs text-slate-400">Trong <span id="kpiLookbackDays" class="text-slate-200 font-semibold">30</span> ngày qua</p>
+      </div>
+
+      <!-- KPI 2: Latest Day Streams & DoD Change -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">Gần nhất (<span id="kpiLatestDateLabel">--/--</span>)</span>
+          <span class="p-1.5 sm:p-2 rounded-lg bg-emerald-500/15 text-emerald-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+          </span>
+        </div>
+        <div class="mt-2.5 flex flex-wrap items-baseline gap-2">
+          <span id="kpiLatestVal" class="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight">263</span>
+          <span id="kpiLatestBadge" class="inline-flex items-center text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400">
+            -136 (-34.1%)
+          </span>
+        </div>
+        <p class="mt-1.5 text-[11px] sm:text-xs text-slate-400 truncate">Hôm trước (<span id="kpiPrevDateLabel">--/--</span>: <span id="kpiPrevVal" class="text-slate-200 font-mono">399</span>)</p>
+      </div>
+
+      <!-- KPI 3: Peak Day -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">Đỉnh Peak</span>
+          <span class="p-1.5 sm:p-2 rounded-lg bg-amber-500/15 text-amber-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
+          </span>
+        </div>
+        <div class="mt-2.5 flex flex-wrap items-baseline gap-2">
+          <span id="kpiPeakVal" class="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight">399</span>
+          <span id="kpiPeakDate" class="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">17/11</span>
+        </div>
+        <p class="mt-1.5 text-[11px] sm:text-xs text-slate-400">Chiếm <span id="kpiPeakShare" class="text-slate-200 font-mono font-semibold">35.2%</span> tổng lượt</p>
+      </div>
+
+      <!-- KPI 4: Active Days & Daily Avg -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">TB / Ngày nghe</span>
+          <span class="p-1.5 sm:p-2 rounded-lg bg-cyan-500/15 text-cyan-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+          </span>
+        </div>
+        <div class="mt-2.5 flex flex-wrap items-baseline gap-1.5">
+          <span id="kpiDailyAvg" class="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight">283.5</span>
+          <span class="text-[11px] font-mono text-slate-400">/ngày</span>
+        </div>
+        <p class="mt-1.5 text-[11px] sm:text-xs text-slate-400"><span id="kpiDaysActive" class="text-emerald-400 font-mono font-semibold">4</span>/<span id="kpiTotalDays">30</span> ngày (Streak: <span id="kpiStreak" class="text-slate-200 font-mono font-semibold">4</span>)</p>
+      </div>
+    </section>
+
+    <!-- Chart Section -->
+    <section class="glass-card rounded-2xl p-4 sm:p-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 mb-5">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <span>Biểu đồ Xu hướng Hàng ngày</span>
+            <span id="timezoneTag" class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">UTC</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Sản lượng stream từng ngày, đường tích lũy & biến động DoD</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="inline-flex rounded-xl bg-slate-900 p-1 border border-slate-800">
+            <button onclick="setRange(7)" id="btnRange7" class="range-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition cursor-pointer">7N</button>
+            <button onclick="setRange(14)" id="btnRange14" class="range-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition cursor-pointer">14N</button>
+            <button onclick="setRange(30)" id="btnRange30" class="range-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 text-white shadow transition cursor-pointer">30N</button>
+            <button onclick="setRange('active')" id="btnRangeActive" class="range-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition cursor-pointer">Ngày nghe</button>
+          </div>
+
+          <button onclick="toggleCumulative()" id="btnToggleCum" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition cursor-pointer">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Tích lũy</span>
+          </button>
+
+          <button onclick="toggleTimezone()" id="btnToggleTz" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-mono font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition cursor-pointer">
+            <span>UTC</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="relative w-full h-[290px] sm:h-[380px]">
+        <canvas id="streamChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Detailed Daily Tracking Table -->
+    <section class="glass-card rounded-2xl overflow-hidden">
+      <div class="p-4 sm:p-6 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 class="text-base sm:text-lg font-bold text-white">Tracking Tăng/Giảm Hàng ngày</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Biến động tuyệt đối (Δ) và tương đối (% DoD) so với ngày liền trước</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+            <input type="checkbox" id="hideZeroCheckbox" onchange="renderTable()" class="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500">
+            <span>Ẩn ngày 0</span>
+          </label>
+          <button onclick="exportCSV()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span>CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-800 bg-slate-900/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <th class="py-3 px-4 sm:px-5">Ngày (<span id="thTzLabel">UTC</span>)</th>
+              <th class="py-3 px-3 sm:px-4 text-right">Stream</th>
+              <th class="py-3 px-3 sm:px-4 text-right">Tuyệt đối (Δ)</th>
+              <th class="py-3 px-3 sm:px-4 text-right">Tương đối (%)</th>
+              <th class="py-3 px-3 sm:px-4 text-right">Tích lũy</th>
+              <th class="py-3 px-5 w-44 hidden md:table-cell">Tỷ trọng Peak</th>
+            </tr>
+          </thead>
+          <tbody id="trackingTableBody" class="divide-y divide-slate-800/60 text-xs sm:text-sm font-mono">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: Setup Script PC & Backup JSON Paste -->
+  <div id="configModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="glass-card w-full max-w-2xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="text-base font-bold text-white">Đồng bộ Cloud (PC → Firebase → Điện thoại)</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <div class="flex border-b border-slate-800 bg-slate-900/50 px-5 pt-2 gap-4 text-xs font-semibold">
+        <button onclick="switchModalTab('script')" id="tabBtnScript" class="pb-2.5 border-b-2 border-indigo-500 text-indigo-400 cursor-pointer">1. Script Tampermonkey (PC)</button>
+        <button onclick="switchModalTab('paste')" id="tabBtnPaste" class="pb-2.5 border-b-2 border-transparent text-slate-400 hover:text-slate-200 cursor-pointer">2. Dán JSON Thủ công</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-sm">
+        <div id="modalTabScript" class="space-y-3">
+          <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-200 leading-relaxed">
+            <b>Đã gắn sẵn Firebase của bạn:</b> Khi cài script này vào Tampermonkey trên máy tính, mỗi 30 giây nó sẽ tự lấy số liệu từ Stationhead và đẩy lên Firebase để điện thoại của bạn luôn cập nhật tự động.
+          </div>
+          <div class="relative">
+            <button onclick="copyTampermonkeyCode()" id="btnCopyTm" class="absolute top-2.5 right-2.5 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow cursor-pointer">
+              Copy Script
+            </button>
+            <pre id="tmScriptBox" class="p-3.5 pt-10 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-300 overflow-x-auto max-h-56 select-all"></pre>
+          </div>
+        </div>
+
+        <div id="modalTabPaste" class="hidden space-y-3">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-slate-300">Dán JSON từ API <code>streakStats</code> vào đây để cập nhật trực tiếp:</p>
+            <a href="https://www.stationhead.com/api/me/channel/696/streakStats?lookbackDays=30" target="_blank" class="text-xs text-indigo-400 hover:text-indigo-300 underline font-medium shrink-0">Mở link API ↗</a>
+          </div>
+          <textarea id="jsonPasteInput" rows="5" placeholder='{"account": ..., "total_streams": 1135, "chart_data": [...]}' class="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 font-mono text-xs focus:outline-none focus:border-indigo-500"></textarea>
+          <div class="flex items-center justify-end gap-2">
+            <button onclick="applyPastedJson()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition cursor-pointer">
+              Cập nhật Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FIREBASE_ENDPOINT = 'https://stationhead-tracker-default-rtdb.asia-southeast1.firebasedatabase.app/users/bachutraimeo_696.json';
+    const DEFAULT_DATA = {"account": {"id": 5434572, "type": "account", "response_timestamp": 1795019785, "handle": "bachutraimeo", "followers": 1, "following": 4, "badge": 0, "emoji": "🔊", "thumbnail": {"id": 25814398, "type": "image", "response_timestamp": 1795019545, "url": "https://stationhead-production1-images.s3.amazonaws.com/images/Account/primary/200/48487011-a896-49d6-a7a6-c9a65ff483b4.jpeg", "color_palette": ["#f3efe4", "#ae4c55", "#3f2a25", "#e39eb2", "#ba9967"], "accent_color": "#f3efe4"}}, "channel": {"id": 696, "type": "channel", "response_timestamp": 1795019785, "channel_name": "Cổ Đông", "alias": "CổĐông", "description": "Fans of Mason Nguyễn", "listener_count": 97, "total_member_count": 863, "online_member_count": 100}, "total_streams": 1135, "days_active": 4, "chart_data": [{"ts": 1792454400000, "val": 0}, {"ts": 1792540800000, "val": 0}, {"ts": 1792627200000, "val": 0}, {"ts": 1792713600000, "val": 0}, {"ts": 1792800000000, "val": 0}, {"ts": 1792886400000, "val": 0}, {"ts": 1792972800000, "val": 0}, {"ts": 1793059200000, "val": 0}, {"ts": 1793145600000, "val": 0}, {"ts": 1793232000000, "val": 0}, {"ts": 1793318400000, "val": 0}, {"ts": 1793404800000, "val": 0}, {"ts": 1793491200000, "val": 0}, {"ts": 1793577600000, "val": 0}, {"ts": 1793664000000, "val": 0}, {"ts": 1793750400000, "val": 0}, {"ts": 1793836800000, "val": 0}, {"ts": 1793923200000, "val": 0}, {"ts": 1794009600000, "val": 0}, {"ts": 1794096000000, "val": 0}, {"ts": 1794182400000, "val": 0}, {"ts": 1794268800000, "val": 0}, {"ts": 1794355200000, "val": 0}, {"ts": 1794441600000, "val": 0}, {"ts": 1794528000000, "val": 0}, {"ts": 1794614400000, "val": 0}, {"ts": 1794700800000, "val": 104}, {"ts": 1794787200000, "val": 368}, {"ts": 1794873600000, "val": 399}, {"ts": 1794960000000, "val": 263}], "days_needed": 3, "days_list": [1794700800000, 1794787200000, 1794873600000, 1794960000000], "timezone": "Etc/UTC"};
+    const TM_SCRIPT_SOURCE = "// ==UserScript==\n// @name         Stationhead Cloud Real-time Sync (PC -> Firebase -> Mobile)\n// @namespace    http://tampermonkey.net/\n// @version      2.0\n// @description  Tự động đồng bộ lượt stream Stationhead lên Firebase mỗi 30 giây để xem real-time trên điện thoại và PC.\n// @author       bachutraimeo\n// @match        https://www.stationhead.com/*\n// @match        file:///*\n// @match        https://*.github.io/*\n// @grant        GM_xmlhttpRequest\n// @grant        GM_setValue\n// @grant        GM_getValue\n// @grant        GM_addValueChangeListener\n// @grant        unsafeWindow\n// @connect      stationhead-tracker-default-rtdb.asia-southeast1.firebasedatabase.app\n// @run-at       document-idle\n// ==/UserScript==\n\n(function() {\n    'use strict';\n\n    const CHANNEL_ID = '696';\n    const LOOKBACK_DAYS = '30';\n    const SYNC_INTERVAL_MS = 30000; // Đồng bộ mỗi 30 giây\n    const FIREBASE_ENDPOINT = 'https://stationhead-tracker-default-rtdb.asia-southeast1.firebasedatabase.app/users/bachutraimeo_696.json';\n    const LOCAL_BRIDGE_KEY = 'sh_bridge_payload_v3';\n\n    const isStationhead = location.hostname.includes('stationhead.com');\n    const isDashboard = document.title.includes('Stationhead Stream Analytics') || location.href.includes('stationhead') || location.href.includes('sh-tracker');\n\n    // =========================================================================\n    // 1. CHẠY NGẦM TRÊN TAB STATIONHEAD.COM (LẤY DỮ LIỆU & ĐẨY LÊN FIREBASE)\n    // =========================================================================\n    if (isStationhead) {\n        let capturedAuthHeader = null;\n\n        // Bắt tự động Bearer Token mới nhất từ các request nội bộ của Stationhead\n        const origFetch = unsafeWindow.fetch;\n        unsafeWindow.fetch = async function(...args) {\n            try {\n                const req = args[0];\n                const init = args[1] || {};\n                let auth = null;\n                if (init.headers) {\n                    if (typeof init.headers.get === 'function') {\n                        auth = init.headers.get('Authorization') || init.headers.get('authorization');\n                    } else {\n                        auth = init.headers['Authorization'] || init.headers['authorization'];\n                    }\n                } else if (req && req.headers && typeof req.headers.get === 'function') {\n                    auth = req.headers.get('Authorization') || req.headers.get('authorization');\n                }\n                if (auth && auth.startsWith('Bearer ')) {\n                    capturedAuthHeader = auth;\n                }\n            } catch (e) {}\n            return origFetch.apply(this, args);\n        };\n\n        function pushToFirebase(packet) {\n            GM_xmlhttpRequest({\n                method: 'PUT',\n                url: FIREBASE_ENDPOINT,\n                headers: { 'Content-Type': 'application/json' },\n                data: JSON.stringify(packet),\n                onload: function(res) {\n                    if (res.status >= 200 && res.status < 300) {\n                        console.log(`[SH Cloud Sync] Đã đẩy ${packet.payload.total_streams} streams lên Firebase lúc ${new Date(packet.syncedAt).toLocaleTimeString()}`);\n                    } else {\n                        console.warn('[SH Cloud Sync] Lỗi ghi Firebase:', res.status, res.responseText);\n                    }\n                },\n                onerror: function(err) {\n                    console.warn('[SH Cloud Sync] Lỗi mạng Firebase:', err);\n                }\n            });\n        }\n\n        async function syncStatsNow() {\n            try {\n                const headers = { 'Accept': 'application/json' };\n                if (capturedAuthHeader) {\n                    headers['Authorization'] = capturedAuthHeader;\n                }\n                const res = await origFetch(`/api/me/channel/${CHANNEL_ID}/streakStats?lookbackDays=${LOOKBACK_DAYS}`, {\n                    method: 'GET',\n                    headers,\n                    credentials: 'include'\n                });\n                if (!res.ok) return;\n                const data = await res.json();\n                if (data && Array.isArray(data.chart_data)) {\n                    const packet = {\n                        syncedAt: Date.now(),\n                        source: 'PC_Tampermonkey',\n                        payload: data\n                    };\n                    // 1. Lưu nội bộ cho tab PC local\n                    GM_setValue(LOCAL_BRIDGE_KEY, JSON.stringify(packet));\n                    // 2. Đẩy lên Firebase cho điện thoại & mọi thiết bị khác\n                    pushToFirebase(packet);\n                }\n            } catch (err) {\n                console.warn('[SH Cloud Sync] Lỗi lấy dữ liệu Stationhead:', err);\n            }\n        }\n\n        setTimeout(syncStatsNow, 3500);\n        setInterval(syncStatsNow, SYNC_INTERVAL_MS);\n\n        GM_addValueChangeListener('sh_bridge_force_ping', function(name, oldVal, newVal, remote) {\n            if (remote) syncStatsNow();\n        });\n    }\n\n    // =========================================================================\n    // 2. CHẠY TRÊN DASHBOARD PC (NHẬN NHANH & PHÁT TÍN HIỆU PING)\n    // =========================================================================\n    if (isDashboard && !isStationhead) {\n        function pushToPage(rawStr) {\n            if (!rawStr) return;\n            try {\n                const parsed = JSON.parse(rawStr);\n                if (parsed && parsed.payload && typeof unsafeWindow.receiveExternalSyncData === 'function') {\n                    unsafeWindow.receiveExternalSyncData(parsed.payload, parsed.syncedAt, 'Auto-Bridge PC');\n                }\n            } catch (e) {}\n        }\n\n        window.addEventListener('DOMContentLoaded', () => {\n            setTimeout(() => pushToPage(GM_getValue(LOCAL_BRIDGE_KEY, null)), 300);\n        });\n\n        GM_addValueChangeListener(LOCAL_BRIDGE_KEY, function(name, oldVal, newVal, remote) {\n            if (remote && newVal) pushToPage(newVal);\n        });\n\n        unsafeWindow.triggerStationheadBridgeSync = function() {\n            GM_setValue('sh_bridge_force_ping', Date.now());\n        };\n    }\n})();\n";
+
+    const STORAGE_KEY_DATA = 'sh_tracker_cloud_cache_v1';
+    const STORAGE_KEY_SESSION_BASE = 'sh_tracker_session_base_v3';
+
+    let currentData = null;
+    let currentRange = 30;
+    let showCumulative = true;
+    let useLocalTz = false;
+    let chartInstance = null;
+    let lastSyncedTimestamp = 0;
+
+    function initApp() {
+      document.getElementById('tmScriptBox').textContent = TM_SCRIPT_SOURCE;
+
+      // Load local cache first for instant zero-flicker render
+      const cached = localStorage.getItem(STORAGE_KEY_DATA);
+      if (cached) {
+        try {
+          currentData = JSON.parse(cached);
+        } catch (e) {
+          currentData = DEFAULT_DATA;
+        }
+      } else {
+        currentData = DEFAULT_DATA;
+      }
+
+      if (!sessionStorage.getItem(STORAGE_KEY_SESSION_BASE)) {
+        sessionStorage.setItem(STORAGE_KEY_SESSION_BASE, String(currentData.total_streams || 0));
+      }
+
+      renderAll();
+
+      // Fetch latest real-time data from Firebase Cloud immediately & poll every 15s
+      fetchFromFirebase(false);
+      setInterval(() => fetchFromFirebase(false), 15000);
+    }
+
+    // Fetch latest snapshot pushed by PC Tampermonkey to Firebase
+    async function fetchFromFirebase(showToast = false) {
+      const syncIcon = document.getElementById('syncIcon');
+      if (showToast) syncIcon.classList.add('animate-spin');
+
+      try {
+        const res = await fetch(`${FIREBASE_ENDPOINT}?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const packet = await res.json();
+
+        if (packet && packet.payload && Array.isArray(packet.payload.chart_data)) {
+          const isNewer = (packet.syncedAt || 0) > lastSyncedTimestamp;
+          lastSyncedTimestamp = packet.syncedAt || Date.now();
+          currentData = packet.payload;
+          localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(packet.payload));
+
+          updateCloudBadge(lastSyncedTimestamp, true);
+          if (isNewer || showToast) {
+            renderAll();
+          }
+          if (showToast) {
+            showBanner('success', `✅ Đã cập nhật số liệu mới nhất từ Cloud! Tổng lượt stream: <b>${(currentData.total_streams || 0).toLocaleString('en-US')}</b>.`);
+          }
+        } else {
+          updateCloudBadge(null, false);
+          if (showToast) {
+            showBanner('warn', `⚡ Firebase đã kết nối nhưng chưa có dữ liệu mới từ PC. Hãy đảm bảo bạn đã cài <b>Script PC</b> vào Tampermonkey và đang mở tab Stationhead trên máy tính.`);
+          }
+        }
+      } catch (err) {
+        console.warn('Firebase fetch error:', err);
+        updateCloudBadge(null, false);
+        if (showToast) {
+          showBanner('warn', `⚠️ Không thể đọc Firebase (${err.message}). Hãy kiểm tra tab <b>Rules</b> trên Firebase Realtime Database đã đặt <code>".read": true, ".write": true</code> chưa.`);
+        }
+      } finally {
+        if (showToast) syncIcon.classList.remove('animate-spin');
+      }
+    }
+
+    function updateCloudBadge(syncedAt, connected) {
+      const badge = document.getElementById('cloudStatusBadge');
+      const dot = document.getElementById('cloudDot');
+      const txt = document.getElementById('cloudText');
+      if (!badge) return;
+
+      if (connected && syncedAt) {
+        badge.className = 'hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+        const tStr = new Date(syncedAt).toLocaleTimeString('vi-VN');
+        txt.textContent = `Cloud Sync (${tStr})`;
+        document.getElementById('lastUpdatedText').textContent = `Đồng bộ: ${tStr}`;
+      } else {
+        badge.className = 'hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-slate-800 text-slate-400 border border-slate-700 shrink-0';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400';
+        txt.textContent = 'Chờ dữ liệu PC';
+      }
+    }
+
+    // Hook called directly if Tampermonkey is running on the same PC browser
+    window.receiveExternalSyncData = function(payload, syncedAt) {
+      if (!payload || !Array.isArray(payload.chart_data)) return;
+      currentData = payload;
+      lastSyncedTimestamp = syncedAt || Date.now();
+      localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(payload));
+      updateCloudBadge(lastSyncedTimestamp, true);
+      renderAll();
+    };
+
+    function handleRealtimeClick() {
+      // If on PC with Tampermonkey active, trigger immediate Stationhead fetch first
+      if (typeof window.triggerStationheadBridgeSync === 'function') {
+        window.triggerStationheadBridgeSync();
+        document.getElementById('syncIcon').classList.add('animate-spin');
+        setTimeout(() => fetchFromFirebase(true), 1200);
+      } else {
+        // On mobile or standalone browser, pull directly from Firebase Cloud
+        fetchFromFirebase(true);
+      }
+    }
+
+    function formatTs(tsMs, includeYear = false) {
+      const offsetMs = useLocalTz ? 7 * 3600 * 1000 : 0;
+      const d = new Date(tsMs + offsetMs);
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const year = d.getUTCFullYear();
+      return includeYear ? `${day}/${month}/${year}` : `${day}/${month}`;
+    }
+
+    function processDailySeries(rawChartData) {
+      const sorted = [...(rawChartData || [])].sort((a, b) => a.ts - b.ts);
+      let cumulative = 0;
+      return sorted.map((item, idx) => {
+        const val = Number(item.val) || 0;
+        cumulative += val;
+        const prevVal = idx > 0 ? (Number(sorted[idx - 1].val) || 0) : null;
+        const absDiff = prevVal !== null ? val - prevVal : null;
+        let pctDiff = null;
+        if (prevVal !== null) {
+          if (prevVal === 0 && val > 0) pctDiff = Infinity;
+          else if (prevVal === 0 && val === 0) pctDiff = 0;
+          else pctDiff = ((val - prevVal) / prevVal) * 100;
+        }
+        return {
+          ts: item.ts,
+          dateShort: formatTs(item.ts, false),
+          dateFull: formatTs(item.ts, true),
+          val,
+          cumulative,
+          prevVal,
+          absDiff,
+          pctDiff
+        };
+      });
+    }
+
+    function renderAll() {
+      if (!currentData) return;
+
+      const acc = currentData.account || {};
+      const ch = currentData.channel || {};
+      if (acc.handle) document.getElementById('userHandle').textContent = `@${acc.handle}`;
+      if (acc.thumbnail && acc.thumbnail.url) document.getElementById('userAvatar').src = acc.thumbnail.url;
+      if (ch.channel_name) document.getElementById('channelBadge').textContent = ch.channel_name;
+
+      if (!lastSyncedTimestamp && acc.response_timestamp) {
+        const updDate = new Date(acc.response_timestamp * 1000);
+        document.getElementById('lastUpdatedText').textContent = `Dữ liệu: ${updDate.toLocaleTimeString('vi-VN')}`;
+      }
+
+      const fullSeries = processDailySeries(currentData.chart_data);
+      const totalStreams = Number(currentData.total_streams) || fullSeries.reduce((s, x) => s + x.val, 0);
+      const activeItems = fullSeries.filter(x => x.val > 0);
+      const daysActive = currentData.days_active !== undefined ? currentData.days_active : activeItems.length;
+
+      const baseStreams = Number(sessionStorage.getItem(STORAGE_KEY_SESSION_BASE) || totalStreams);
+      const sessionGain = totalStreams - baseStreams;
+      const deltaEl = document.getElementById('kpiSessionDelta');
+      if (sessionGain > 0) {
+        deltaEl.textContent = `+${sessionGain.toLocaleString('en-US')}`;
+        deltaEl.classList.remove('hidden');
+      } else {
+        deltaEl.classList.add('hidden');
+      }
+
+      document.getElementById('kpiTotalStreams').textContent = totalStreams.toLocaleString('en-US');
+      document.getElementById('kpiLookbackDays').textContent = fullSeries.length;
+
+      if (fullSeries.length > 0) {
+        const latest = fullSeries[fullSeries.length - 1];
+        const prev = fullSeries.length > 1 ? fullSeries[fullSeries.length - 2] : null;
+        document.getElementById('kpiLatestDateLabel').textContent = latest.dateShort;
+        document.getElementById('kpiLatestVal').textContent = latest.val.toLocaleString('en-US');
+
+        const badgeEl = document.getElementById('kpiLatestBadge');
+        if (prev) {
+          document.getElementById('kpiPrevDateLabel').textContent = prev.dateShort;
+          document.getElementById('kpiPrevVal').textContent = prev.val.toLocaleString('en-US');
+          const diff = latest.absDiff;
+          const sign = diff > 0 ? '+' : '';
+          let pctStr = '';
+          if (latest.pctDiff === Infinity) pctStr = 'Mới';
+          else if (latest.pctDiff !== null) pctStr = `${latest.pctDiff > 0 ? '+' : ''}${latest.pctDiff.toFixed(1)}%`;
+
+          badgeEl.textContent = `${sign}${diff.toLocaleString('en-US')} (${pctStr})`;
+          if (diff > 0) {
+            badgeEl.className = 'inline-flex items-center text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400';
+          } else if (diff < 0) {
+            badgeEl.className = 'inline-flex items-center text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400';
+          } else {
+            badgeEl.className = 'inline-flex items-center text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400';
+          }
+        }
+      }
+
+      let peakItem = fullSeries[0] || { val: 0, dateFull: '--/--/----', dateShort: '--/--' };
+      for (const item of fullSeries) {
+        if (item.val > peakItem.val) peakItem = item;
+      }
+      document.getElementById('kpiPeakVal').textContent = peakItem.val.toLocaleString('en-US');
+      document.getElementById('kpiPeakDate').textContent = peakItem.dateShort;
+      const peakShare = totalStreams > 0 ? ((peakItem.val / totalStreams) * 100).toFixed(1) : '0.0';
+      document.getElementById('kpiPeakShare').textContent = `${peakShare}%`;
+
+      const activeSum = activeItems.reduce((s, x) => s + x.val, 0);
+      const avgActive = activeItems.length > 0 ? (activeSum / activeItems.length) : 0;
+      document.getElementById('kpiDailyAvg').textContent = avgActive.toFixed(1);
+      document.getElementById('kpiDaysActive').textContent = daysActive;
+      document.getElementById('kpiTotalDays').textContent = fullSeries.length;
+
+      let streak = 0;
+      for (let i = fullSeries.length - 1; i >= 0; i--) {
+        if (fullSeries[i].val > 0) streak++;
+        else break;
+      }
+      document.getElementById('kpiStreak').textContent = `${streak}d`;
+
+      renderChart(fullSeries);
+      renderTable(fullSeries, peakItem.val);
+    }
+
+    function renderChart(fullSeries) {
+      let filtered = fullSeries;
+      if (currentRange === 'active') {
+        filtered = fullSeries.filter(x => x.val > 0);
+      } else if (typeof currentRange === 'number') {
+        filtered = fullSeries.slice(-currentRange);
+      }
+
+      const labels = filtered.map(x => x.dateShort);
+      const dailyVals = filtered.map(x => x.val);
+      const cumVals = filtered.map(x => x.cumulative);
+
+      const ctx = document.getElementById('streamChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      const barGradient = ctx.createLinearGradient(0, 0, 0, 340);
+      barGradient.addColorStop(0, 'rgba(99, 102, 241, 0.92)');
+      barGradient.addColorStop(1, 'rgba(79, 70, 229, 0.25)');
+
+      const datasets = [
+        {
+          type: 'bar',
+          label: 'Stream/ngày',
+          data: dailyVals,
+          backgroundColor: barGradient,
+          hoverBackgroundColor: '#818cf8',
+          borderColor: '#6366f1',
+          borderWidth: 1,
+          borderRadius: 5,
+          maxBarThickness: 36,
+          yAxisID: 'y',
+          order: 2
+        }
+      ];
+
+      if (showCumulative) {
+        datasets.push({
+          type: 'line',
+          label: 'Tích lũy',
+          data: cumVals,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.12)',
+          borderWidth: 2.5,
+          pointRadius: filtered.length <= 14 ? 4 : 2,
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#10b981',
+          pointBorderColor: '#090d16',
+          pointBorderWidth: 1.5,
+          tension: 0.32,
+          fill: false,
+          yAxisID: 'y1',
+          order: 1
+        });
+      }
+
+      chartInstance = new Chart(ctx, {
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'end',
+              labels: {
+                color: '#cbd5e1',
+                usePointStyle: true,
+                boxWidth: 8,
+                font: { family: 'Inter', size: 11, weight: '500' }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#f8fafc',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(148, 163, 184, 0.25)',
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 10,
+              titleFont: { family: 'JetBrains Mono', size: 12, weight: '700' },
+              bodyFont: { family: 'JetBrains Mono', size: 11 },
+              callbacks: {
+                title: (items) => `Ngày ${filtered[items[0].dataIndex].dateFull}`,
+                afterBody: (items) => {
+                  const row = filtered[items[0].dataIndex];
+                  if (row.absDiff === null) return [];
+                  const sign = row.absDiff > 0 ? '+' : '';
+                  let pct = '';
+                  if (row.pctDiff === Infinity) pct = ' (Mới từ 0)';
+                  else if (row.pctDiff !== null) pct = ` (${row.pctDiff > 0 ? '+' : ''}${row.pctDiff.toFixed(1)}%)`;
+                  return [`DoD: ${sign}${row.absDiff.toLocaleString('en-US')}${pct}`];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(148, 163, 184, 0.06)', drawBorder: false },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              beginAtZero: true,
+              grid: { color: 'rgba(148, 163, 184, 0.08)', drawBorder: false },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              display: showCumulative,
+              beginAtZero: true,
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#34d399', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTable(passedSeries, passedPeak) {
+      const fullSeries = passedSeries || processDailySeries(currentData.chart_data);
+      const peakVal = passedPeak !== undefined ? passedPeak : Math.max(...fullSeries.map(x => x.val), 1);
+      const hideZero = document.getElementById('hideZeroCheckbox').checked;
+
+      let rows = [...fullSeries].reverse();
+      if (hideZero) rows = rows.filter(r => r.val > 0);
+
+      const tbody = document.getElementById('trackingTableBody');
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500 font-sans">Không có dữ liệu hiển thị.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        let absHtml = `<span class="text-slate-500">—</span>`;
+        if (r.absDiff !== null) {
+          if (r.absDiff > 0) absHtml = `<span class="text-emerald-400 font-semibold">+${r.absDiff.toLocaleString('en-US')}</span>`;
+          else if (r.absDiff < 0) absHtml = `<span class="text-rose-400 font-semibold">${r.absDiff.toLocaleString('en-US')}</span>`;
+          else absHtml = `<span class="text-slate-500">0</span>`;
+        }
+
+        let pctHtml = `<span class="text-slate-500">—</span>`;
+        if (r.pctDiff !== null) {
+          if (r.pctDiff === Infinity) pctHtml = `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-300">▲ Mới</span>`;
+          else if (r.pctDiff > 0) pctHtml = `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-400">▲ +${r.pctDiff.toFixed(1)}%</span>`;
+          else if (r.pctDiff < 0) pctHtml = `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-500/15 text-rose-400">▼ ${r.pctDiff.toFixed(1)}%</span>`;
+          else pctHtml = `<span class="text-slate-500">0.0%</span>`;
+        }
+
+        const barWidth = peakVal > 0 ? Math.min(100, Math.round((r.val / peakVal) * 100)) : 0;
+        const isPeak = r.val > 0 && r.val === peakVal;
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 sm:px-5 text-slate-200 font-medium whitespace-nowrap">
+              <span>${r.dateFull}</span>
+              ${isPeak ? '<span class="ml-1.5 text-[10px] font-sans font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">PEAK</span>' : ''}
+            </td>
+            <td class="py-3 px-3 sm:px-4 text-right font-bold ${r.val > 0 ? 'text-white' : 'text-slate-500'}">${r.val.toLocaleString('en-US')}</td>
+            <td class="py-3 px-3 sm:px-4 text-right whitespace-nowrap">${absHtml}</td>
+            <td class="py-3 px-3 sm:px-4 text-right whitespace-nowrap">${pctHtml}</td>
+            <td class="py-3 px-3 sm:px-4 text-right text-slate-300">${r.cumulative.toLocaleString('en-US')}</td>
+            <td class="py-3 px-5 hidden md:table-cell">
+              <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                <div class="h-2 rounded-full ${isPeak ? 'bg-amber-400' : 'bg-indigo-500'}" style="width: ${barWidth}%"></div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function setRange(range) {
+      currentRange = range;
+      document.querySelectorAll('.range-btn').forEach(btn => {
+        btn.className = 'range-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition cursor-pointer';
+      });
+      const activeId = range === 7 ? 'btnRange7' : range === 14 ? 'btnRange14' : range === 30 ? 'btnRange30' : 'btnRangeActive';
+      document.getElementById(activeId).className = 'range-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 text-white shadow transition cursor-pointer';
+      renderChart(processDailySeries(currentData.chart_data));
+    }
+
+    function toggleCumulative() {
+      showCumulative = !showCumulative;
+      const btn = document.getElementById('btnToggleCum');
+      btn.className = showCumulative
+        ? 'inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition cursor-pointer'
+        : 'inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 hover:text-white transition cursor-pointer';
+      renderChart(processDailySeries(currentData.chart_data));
+    }
+
+    function toggleTimezone() {
+      useLocalTz = !useLocalTz;
+      const label = useLocalTz ? 'UTC+7' : 'UTC';
+      document.getElementById('btnToggleTz').innerHTML = `<span>${label}</span>`;
+      document.getElementById('timezoneTag').textContent = label;
+      document.getElementById('thTzLabel').textContent = label;
+      renderAll();
+    }
+
+    function openModal(defaultTab = 'script') {
+      document.getElementById('configModal').classList.remove('hidden');
+      switchModalTab(defaultTab);
+    }
+
+    function closeModal() {
+      document.getElementById('configModal').classList.add('hidden');
+    }
+
+    function switchModalTab(tab) {
+      ['script', 'paste'].forEach(t => {
+        document.getElementById(`modalTab${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.add('hidden');
+        document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`).className = 'pb-2.5 border-b-2 border-transparent text-slate-400 hover:text-slate-200 cursor-pointer';
+      });
+      document.getElementById(`modalTab${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.remove('hidden');
+      document.getElementById(`tabBtn${tab.charAt(0).toUpperCase() + tab.slice(1)}`).className = 'pb-2.5 border-b-2 border-indigo-500 text-indigo-400 cursor-pointer';
+    }
+
+    function copyTampermonkeyCode() {
+      navigator.clipboard.writeText(TM_SCRIPT_SOURCE).then(() => {
+        const btn = document.getElementById('btnCopyTm');
+        btn.textContent = 'Đã Copy!';
+        btn.className = 'absolute top-2.5 right-2.5 px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold shadow cursor-pointer';
+        setTimeout(() => {
+          btn.textContent = 'Copy Script';
+          btn.className = 'absolute top-2.5 right-2.5 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow cursor-pointer';
+        }, 2000);
+      });
+    }
+
+    function applyPastedJson(rawText = null) {
+      const text = rawText !== null ? rawText : document.getElementById('jsonPasteInput').value.trim();
+      if (!text) return;
+      try {
+        const parsed = JSON.parse(text);
+        if (!parsed || !Array.isArray(parsed.chart_data)) {
+          alert('JSON không hợp lệ: Thiếu mảng chart_data.');
+          return;
+        }
+        currentData = parsed;
+        localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(parsed));
+        document.getElementById('jsonPasteInput').value = '';
+        closeModal();
+        renderAll();
+        showBanner('success', `✅ Đã cập nhật dữ liệu mới nhất! Tổng lượt stream: <b>${(parsed.total_streams || 0).toLocaleString('en-US')}</b>.`);
+      } catch (e) {
+        alert('Lỗi định dạng JSON.');
+      }
+    }
+
+    document.addEventListener('paste', (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+      const pasted = (e.clipboardData || window.clipboardData).getData('text');
+      if (pasted && pasted.includes('"chart_data"')) {
+        e.preventDefault();
+        applyPastedJson(pasted);
+      }
+    });
+
+    function showBanner(type, htmlMsg) {
+      const banner = document.getElementById('statusBanner');
+      const inner = document.getElementById('statusBannerInner');
+      const icon = document.getElementById('statusBannerIcon');
+      const msg = document.getElementById('statusBannerMsg');
+      banner.classList.remove('hidden');
+      msg.innerHTML = htmlMsg;
+      if (type === 'success') {
+        inner.className = 'rounded-xl p-3.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 flex items-start justify-between gap-3 text-xs sm:text-sm';
+        icon.textContent = '🎉';
+      } else {
+        inner.className = 'rounded-xl p-3.5 border border-amber-500/30 bg-amber-500/10 text-amber-200 flex items-start justify-between gap-3 text-xs sm:text-sm';
+        icon.textContent = '⚡';
+      }
+    }
+
+    function hideBanner() {
+      document.getElementById('statusBanner').classList.add('hidden');
+    }
+
+    function exportCSV() {
+      const series = processDailySeries(currentData.chart_data);
+      const header = ['Date', 'Unix_Timestamp_MS', 'Daily_Streams', 'DoD_Absolute_Change', 'DoD_Relative_Pct', 'Cumulative_Streams'];
+      const rows = series.map(r => [
+        r.dateFull,
+        r.ts,
+        r.val,
+        r.absDiff === null ? '' : r.absDiff,
+        r.pctDiff === null ? '' : (r.pctDiff === Infinity ? 'NEW' : r.pctDiff.toFixed(2) + '%'),
+        r.cumulative
+      ]);
+      const csvContent = 'data:text/csv;charset=utf-8,' + [header.join(','), ...rows.map(e => e.join(','))].join('\n');
+      const link = document.createElement('a');
+      link.setAttribute('href', encodeURI(csvContent));
+      link.setAttribute('download', `stationhead_streams_${currentData.account?.handle || 'user'}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
